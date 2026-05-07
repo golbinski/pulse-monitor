@@ -29,6 +29,12 @@ pub struct ProcessInfo {
 }
 
 #[derive(Serialize, Clone)]
+pub struct CpuProcess {
+    pub name: String,
+    pub cpu_pct: f32,
+}
+
+#[derive(Serialize, Clone)]
 pub struct RamInfo {
     pub used_mb: u64,
     pub total_mb: u64,
@@ -58,6 +64,7 @@ pub struct DiskInfo {
 #[derive(Serialize, Clone)]
 pub struct Metrics {
     pub cpu: CpuInfo,
+    pub top_cpu_processes: Vec<CpuProcess>,
     pub ram: RamInfo,
     pub battery: Option<BatteryInfo>,
     pub network: NetworkInfo,
@@ -106,7 +113,7 @@ fn make_image(data: &(Vec<u8>, u32, u32)) -> Image<'static> {
 
 #[tauri::command]
 async fn get_metrics(state: State<'_, AppState>) -> Result<Metrics, String> {
-    let (total_usage, per_core, used_mb, total_mb, procs, disk, download_kbps, upload_kbps, cpu_temp_sysinfo, battery) = {
+    let (total_usage, per_core, used_mb, total_mb, procs, cpu_procs, disk, download_kbps, upload_kbps, cpu_temp_sysinfo, battery) = {
         let mut sys = state.sys.lock().map_err(|e| e.to_string())?;
         sys.refresh_all();
 
@@ -125,6 +132,17 @@ async fn get_metrics(state: State<'_, AppState>) -> Result<Metrics, String> {
             .collect();
         procs.sort_by(|a, b| b.memory_mb.cmp(&a.memory_mb));
         procs.truncate(5);
+
+        let mut cpu_procs: Vec<CpuProcess> = sys
+            .processes()
+            .values()
+            .map(|p| CpuProcess {
+                name: p.name().to_string_lossy().to_string(),
+                cpu_pct: p.cpu_usage(),
+            })
+            .collect();
+        cpu_procs.sort_by(|a, b| b.cpu_pct.partial_cmp(&a.cpu_pct).unwrap_or(std::cmp::Ordering::Equal));
+        cpu_procs.truncate(5);
 
         let disks = Disks::new_with_refreshed_list();
         let disk = disks.list().first().map(|d| DiskInfo {
@@ -154,7 +172,7 @@ async fn get_metrics(state: State<'_, AppState>) -> Result<Metrics, String> {
         let download_kbps = rx as f64 / 1024.0;
         let upload_kbps = tx as f64 / 1024.0;
 
-        (total_usage, per_core, used_mb, total_mb, procs, disk, download_kbps, upload_kbps, cpu_temp_sysinfo, battery)
+        (total_usage, per_core, used_mb, total_mb, procs, cpu_procs, disk, download_kbps, upload_kbps, cpu_temp_sysinfo, battery)
     };
 
     #[cfg(target_os = "macos")]
@@ -168,6 +186,7 @@ async fn get_metrics(state: State<'_, AppState>) -> Result<Metrics, String> {
 
     Ok(Metrics {
         cpu: CpuInfo { total_usage, per_core, temperature: cpu_temp, throttling, fan_speeds },
+        top_cpu_processes: cpu_procs,
         ram: RamInfo { used_mb, total_mb, top_processes: procs },
         battery,
         network: NetworkInfo { download_kbps, upload_kbps },

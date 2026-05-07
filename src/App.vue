@@ -8,6 +8,11 @@ interface ProcessInfo {
   memory_mb: number
 }
 
+interface CpuProcess {
+  name: string
+  cpu_pct: number
+}
+
 interface Metrics {
   cpu: {
     total_usage: number
@@ -16,6 +21,7 @@ interface Metrics {
     throttling: boolean
     fan_speeds: number[]
   }
+  top_cpu_processes: CpuProcess[]
   ram: {
     used_mb: number
     total_mb: number
@@ -161,6 +167,13 @@ onUnmounted(() => stopPolling())
       <div v-if="metrics.cpu.fan_speeds.length" class="row">
         <span class="label">Fans</span>
         <span class="val">{{ metrics.cpu.fan_speeds.map(f => f + ' RPM').join('  ') }}</span>
+      </div>
+
+      <!-- Top CPU processes -->
+      <div class="section-header">CPU PROCESSES</div>
+      <div v-for="(proc, i) in metrics.top_cpu_processes" :key="i" class="row proc-row">
+        <span class="proc-name">{{ proc.name.slice(0, 18).padEnd(18) }}</span>
+        <span class="val dim">{{ fmt(proc.cpu_pct, 1) }}%</span>
       </div>
 
       <!-- RAM -->
