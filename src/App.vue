@@ -114,6 +114,14 @@ onMounted(async () => {
   await win.setAlwaysOnTop(true)
   await win.setFocus()
   startPolling()
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopPolling()
+    } else {
+      startPolling()
+    }
+  })
 })
 
 onUnmounted(() => stopPolling())
